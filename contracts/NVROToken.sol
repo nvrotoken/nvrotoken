@@ -204,6 +204,8 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     mapping (address => mapping (address => uint256)) private _allowances;
     mapping (address => bool) private _isExcludedFromFee;
     mapping (address => bool) private _isExcluded;
+    mapping (address => uint256) private _locked; //the list of locked addresses
+
     address[] private _excluded;
     address private _developmentWalletAddress;
     address private _marketingWalletAddress;
@@ -277,7 +279,14 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
        _marketingWalletAddress = account;
        _isExcludedFromFee[account] = true;
     }
+    function lockAccount(address account, uint256 locked_until) public onlyOwner() {
+        _locked[account] = locked_until;
+    }
     
+    function isLocked(address account) public returns (bool) {
+        if(_locked[account] && _locked[account] > now) return true;
+        return false;
+    }
     function totalSupply() public view override returns (uint256) {
         return _tTotal;
     }
@@ -518,6 +527,10 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
+
+        //make sure the address is not locked
+        require(isLocked(from) == true,"these address is locked.");
+
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
         uint256 contractTokenBalance = balanceOf(address(this));
