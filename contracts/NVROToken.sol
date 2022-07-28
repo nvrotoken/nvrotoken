@@ -3,11 +3,9 @@ pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Snapshot.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IUniswapV2Factory {
     event PairCreated(address indexed token0, address indexed token1, address pair, uint);
@@ -215,6 +213,8 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     uint256 private _tFeeTotal;
     
     uint8 private _decimals = 18;
+
+    //the fees
     uint256 public _taxFee = 10; //goes to holders 1%
     uint256 private _previousTaxFee = _taxFee;
     uint256 public _developmentFee = 10; //1% for development team
@@ -223,6 +223,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     uint256 private _previousLiquidityFee = _liquidityFee;
     uint256 public _marketingFee = 10; //1% for marketing fee
     uint256 private _previousMarketingFee = _marketingFee;
+
     struct TFees {
         uint256 tax;
         uint256 liquidity;
@@ -234,8 +235,11 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     address public immutable uniswapV2Pair;
     bool inSwapAndLiquify;
     bool public swapAndLiquifyEnabled = true;
-    uint256 public _maxTxAmount = 500000000 * 10**18;
-    uint256 private numTokensSellToAddToLiquidity = 10000000 * 10**18;
+
+    //anti-whale dump
+    uint256 public _maxTxAmount = 5000000 * 10**18; 
+    //for every 500,000 token collected from the tax will be injected into liquidity
+    uint256 private numTokensSellToAddToLiquidity = 500000 * 10**18; 
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated(bool enabled);
 
@@ -252,8 +256,8 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     }
 
     
-    constructor() ERC20("NVRO Token", "NVRO") {
-    
+    constructor() ERC20("Enviro Token", "NVRO") {
+        
          _rOwned[owner()] = _rTotal;
 
         IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
@@ -264,8 +268,6 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
 
-
-
         _mint(msg.sender,_tTotal);
     }
     function setDevelopmentAddress(address account) public onlyOwner() {
@@ -275,7 +277,6 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     }
 
      function setMarketingAddress(address account) public onlyOwner() {
-
        _marketingWalletAddress = account;
        _isExcludedFromFee[account] = true;
     }
@@ -283,9 +284,20 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _locked[account] = locked_until;
     }
     
-    function isLocked(address account) public returns (bool) {
-        if(_locked[account] && _locked[account] > now) return true;
-        return false;
+    function isLocked(address account) public view returns (bool) {
+
+        require(_locked[account] > 0, "account is not locked");
+        require(_locked[account] > block.timestamp, "account is not locked");
+        
+        return true;
+    }
+    function getLockTime(address account) public view returns (uint256) {
+
+        require(_locked[account] > 0, "account is not locked");
+        require(_locked[account] > block.timestamp, "account is not locked");
+
+        return _locked[account];
+        
     }
     function totalSupply() public view override returns (uint256) {
         return _tTotal;
@@ -310,14 +322,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
         return true;
     }
-    /*function increaseAllowance(address spender, uint256 addedValue) public virtual override returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].add(addedValue));
-        return true;
-    }
-    function decreaseAllowance(address spender, uint256 subtractedValue) public virtual override returns (bool) {
-        _approve(_msgSender(), spender, _allowances[_msgSender()][spender].sub(subtractedValue, "ERC20: decreased allowance below zero"));
-        return true;
-    }*/
+  
     function isExcludedFromReward(address account) public view returns (bool) {
         return _isExcluded[account];
     }
@@ -385,18 +390,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     function includeInFee(address account) public onlyOwner {
         _isExcludedFromFee[account] = false;
     }
-    function setTaxFeePercent(uint256 taxFee) external onlyOwner() {
-        _taxFee = taxFee;
-    }
-    function setDevelopmentFeePercent(uint256 developmentFee) external onlyOwner() {
-        _developmentFee = developmentFee;
-    }
-    function setMarketingFeePercent(uint256 marketingFee) external onlyOwner() {
-        _marketingFee = marketingFee;
-    }
-    function setLiquidityFeePercent(uint256 liquidityFee) external onlyOwner() {
-        _liquidityFee = liquidityFee;
-    }
+    
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
         _maxTxAmount = _tTotal.mul(maxTxPercent).div(
             10**3
@@ -407,6 +401,9 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
     receive() external payable {}
+
+    //tokenomics
+
     function _reflectFee(uint256 rFee, uint256 tFee) private {
         _rTotal = _rTotal.sub(rFee);
         _tFeeTotal = _tFeeTotal.add(tFee);
@@ -422,6 +419,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
 
         return (rAmount, rTransferAmount, rFee, tTransferAmount, tfees.tax, tfees.liquidity, tfees.development, tfees.marketing);
     }
+
     function _getTValues(uint256 tAmount) private view returns (uint256, TFees memory) {
         uint256 tFee = calculateTaxFee(tAmount);
         uint256 tLiquidity = calculateLiquidityFee(tAmount);
@@ -432,6 +430,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         
         return (tTransferAmount, tFees);
     }
+
     function _getRValues(uint256 tAmount, TFees memory tfees, uint256 currentRate) private pure returns (uint256, uint256, uint256) {
         uint256 rAmount = tAmount.mul(currentRate);
         uint256 rFee = tfees.tax.mul(currentRate);
@@ -456,6 +455,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         if (rSupply < _rTotal.div(_tTotal)) return (_rTotal, _tTotal);
         return (rSupply, tSupply);
     }
+
     function _takeLiquidity(uint256 tLiquidity) private {
         uint256 currentRate =  _getRate();
         uint256 rLiquidity = tLiquidity.mul(currentRate);
@@ -463,6 +463,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         if(_isExcluded[address(this)])
             _tOwned[address(this)] = _tOwned[address(this)].add(tLiquidity);
     }
+
     function _takeDevelopment(uint256 tDevelopment) private {
         uint256 currentRate =  _getRate();
         uint256 rDevelopment = tDevelopment.mul(currentRate);
@@ -470,6 +471,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         if(_isExcluded[_developmentWalletAddress])
             _tOwned[_developmentWalletAddress] = _tOwned[_developmentWalletAddress].add(tDevelopment);
     }
+
     function _takeMarketing(uint256 tMarketing) private {
         uint256 currentRate =  _getRate();
         uint256 rMarketing = tMarketing.mul(currentRate);
@@ -518,22 +520,26 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     function isExcludedFromFee(address account) public view returns(bool) {
         return _isExcludedFromFee[account];
     }
-   
+    
+
+    //transfers
     function _transfer(
         address from,
         address to,
         uint256 amount
     ) internal virtual override {
+
         require(from != address(0), "ERC20: transfer from the zero address");
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
 
         //make sure the address is not locked
-        require(isLocked(from) == true,"these address is locked.");
+        require(isLocked(from) != true, "these address is locked.");
 
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
         uint256 contractTokenBalance = balanceOf(address(this));
+        
         if(contractTokenBalance >= _maxTxAmount)
         {
             contractTokenBalance = _maxTxAmount;
@@ -554,39 +560,8 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         }
         _tokenTransfer(from,to,amount,takeFee);
     }
-    function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
-        uint256 half = contractTokenBalance.div(2);
-        uint256 otherHalf = contractTokenBalance.sub(half);
-        uint256 initialBalance = address(this).balance;
-        swapTokensForEth(half);
-        uint256 newBalance = address(this).balance.sub(initialBalance);
-        addLiquidity(otherHalf, newBalance);
-        emit SwapAndLiquify(half, newBalance, otherHalf);
-    }
-    function swapTokensForEth(uint256 tokenAmount) private {
-        address[] memory path = new address[](2);
-        path[0] = address(this);
-        path[1] = uniswapV2Router.WETH();
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
-            tokenAmount,
-            0,
-            path,
-            address(this),
-            block.timestamp
-        );
-    }
-    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
-        _approve(address(this), address(uniswapV2Router), tokenAmount);
-        uniswapV2Router.addLiquidityETH{value: ethAmount}(
-            address(this),
-            tokenAmount,
-            0,
-            0,
-            owner(),
-            block.timestamp
-        );
-    }
+
+
     function _tokenTransfer(address sender, address recipient, uint256 amount,bool takeFee) private {
         if(!takeFee)
             removeAllFee();
@@ -635,6 +610,42 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _takeMarketing(tMarketing);
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
+    }
+
+
+     //liquidity pool functions
+    function swapAndLiquify(uint256 contractTokenBalance) private lockTheSwap {
+        uint256 half = contractTokenBalance.div(2);
+        uint256 otherHalf = contractTokenBalance.sub(half);
+        uint256 initialBalance = address(this).balance;
+        swapTokensForEth(half);
+        uint256 newBalance = address(this).balance.sub(initialBalance);
+        addLiquidity(otherHalf, newBalance);
+        emit SwapAndLiquify(half, newBalance, otherHalf);
+    }
+    function swapTokensForEth(uint256 tokenAmount) private {
+        address[] memory path = new address[](2);
+        path[0] = address(this);
+        path[1] = uniswapV2Router.WETH();
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+        uniswapV2Router.swapExactTokensForETHSupportingFeeOnTransferTokens(
+            tokenAmount,
+            0,
+            path,
+            address(this),
+            block.timestamp
+        );
+    }
+    function addLiquidity(uint256 tokenAmount, uint256 ethAmount) private {
+        _approve(address(this), address(uniswapV2Router), tokenAmount);
+        uniswapV2Router.addLiquidityETH{value: ethAmount}(
+            address(this),
+            tokenAmount,
+            0,
+            0,
+            owner(),
+            block.timestamp
+        );
     }
 
 }
