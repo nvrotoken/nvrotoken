@@ -238,8 +238,10 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
 
     //anti-whale dump
     uint256 public _maxTxAmount = 5000000 * 10**18; 
+
     //for every 500,000 token collected from the tax will be injected into liquidity
     uint256 private numTokensSellToAddToLiquidity = 500000 * 10**18; 
+
     event MinTokensBeforeSwapUpdated(uint256 minTokensBeforeSwap);
     event SwapAndLiquifyEnabledUpdated(bool enabled);
 
@@ -269,6 +271,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _isExcludedFromFee[address(this)] = true;
 
         _mint(msg.sender,_tTotal);
+
     }
     function setDevelopmentAddress(address account) public onlyOwner() {
 
@@ -276,7 +279,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
        _isExcludedFromFee[account] = true;
     }
 
-     function setMarketingAddress(address account) public onlyOwner() {
+    function setMarketingAddress(address account) public onlyOwner() {
        _marketingWalletAddress = account;
        _isExcludedFromFee[account] = true;
     }
@@ -384,10 +387,10 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _reflectFee(rFee, tFee);
         emit Transfer(sender, recipient, tTransferAmount);
     }
-    function excludeFromFee(address account) public onlyOwner {
+    function excludeFromFee(address account) public onlyOwner() {
     _isExcludedFromFee[account] = true;
     }
-    function includeInFee(address account) public onlyOwner {
+    function includeInFee(address account) public onlyOwner() {
         _isExcludedFromFee[account] = false;
     }
     
@@ -396,7 +399,7 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
             10**3
         );
     }
-    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner {
+    function setSwapAndLiquifyEnabled(bool _enabled) public onlyOwner() {
         swapAndLiquifyEnabled = _enabled;
         emit SwapAndLiquifyEnabledUpdated(_enabled);
     }
@@ -539,11 +542,12 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
         uint256 contractTokenBalance = balanceOf(address(this));
-        
+
         if(contractTokenBalance >= _maxTxAmount)
         {
             contractTokenBalance = _maxTxAmount;
         }
+
         bool overMinTokenBalance = contractTokenBalance >= numTokensSellToAddToLiquidity;
         if (
             overMinTokenBalance &&

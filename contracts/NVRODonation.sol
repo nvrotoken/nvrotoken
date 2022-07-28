@@ -12,7 +12,7 @@ contract NVRODonation is Ownable {
 	IERC20 private _tokenContract;
 	address private _donationAddress;
 
-	event SendDonation(
+	event Donate(
 		address from,
 		uint256 amount
 	);
@@ -29,6 +29,6 @@ contract NVRODonation is Ownable {
 		uint256 balance = _tokenContract.balanceOf(_msgSender());
 		require(balance >= amount, 'your balance is not enough');
 		_tokenContract.transferFrom(_msgSender(),_donationAddress, amount);
-		emit SendDonation(_msgSender(), amount);
+		emit Donate(_msgSender(), amount);
 	}
 }
