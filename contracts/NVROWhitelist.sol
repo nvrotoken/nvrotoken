@@ -9,8 +9,8 @@ contract NVROWhitelist is Ownable {
 	using SafeMath for uint256;
 	using Address for address;
 	bool private _locked = true;
-	uint256 private _tokenAmount = 10000;
-	mapping (address => bool) private _recievers;
+	
+	mapping (address => uint256) private _recievers;
 	mapping (address => bool) private _redeemed;
 	IERC20 private _tokenContract;
 
@@ -35,12 +35,13 @@ contract NVROWhitelist is Ownable {
 	function setContract(IERC20 addr) public onlyOwner(){
 		_tokenContract = addr;
 	}
-	function addToWhitelist(address account) public onlyOwner(){
-		_recievers[account] = true;
+	function addToWhitelist(address account, uint256 amount) public onlyOwner(){
+		require(_recievers[account] == 0, 'account already added');
+		_recievers[account] = amount;
 		emit Whitelisted(account);
 	}
 	function removeFromWhitelist(address account) public onlyOwner(){
-		_recievers[account] = false;
+		_recievers[account] = 0;
 		emit RemovedFromWhitelist(account);
 	}
 	function setClaimable(bool flag) public onlyOwner(){
@@ -50,8 +51,8 @@ contract NVROWhitelist is Ownable {
 		return _locked;
 	}
 	function isWhitelisted(address account) public view returns (bool) {
-		require(_recievers[account] == true, 'account is not in the whitelist');
-		return _recievers[account];
+		require(_recievers[account] > 0, 'account is not in the whitelist');
+		return true;
 	}
 	function isRedeemed(address account) public view returns (bool) {
 		require(_redeemed[account] == true, 'account is not redeemed yet');
@@ -60,18 +61,22 @@ contract NVROWhitelist is Ownable {
 	//release token
 	function release(address account) public  onlyOwner() {
 		require(!isLocked(),'cannot release yet');
+		require(_recievers[account] > 0, 'account has no balance');
 		require(_redeemed[account] != true , 'account already redeemed'); 
 		_redeemed[account] = true;
-		_tokenContract.transferFrom(owner(), account, _tokenAmount);
-		emit TokenDropped(account, _tokenAmount);
+		_recievers[account] = 0;
+		_tokenContract.transferFrom(owner(), account, _recievers[account]);
+		emit TokenDropped(account, _recievers[account]);
     }
     //claim token
     function claim() public  onlyOwner() {
 		require(!isLocked(),'cannot release yet');
+		require(_recievers[_msgSender()] > 0, 'account has no balance');
 		require(_redeemed[_msgSender()] != true , 'account already redeemed'); 
 		_redeemed[_msgSender()] = true;
-		
-		_tokenContract.transferFrom(owner(), _msgSender(), _tokenAmount);
-		emit TokenClaimed(_msgSender(), _tokenAmount);
+		_recievers[_msgSender()] = 0;
+		_tokenContract.transferFrom(owner(), _msgSender(), _recievers[_msgSender()]);
+
+		emit TokenClaimed(_msgSender(), _recievers[_msgSender()]);
     }
 }
