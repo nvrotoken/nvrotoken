@@ -2,7 +2,6 @@
 pragma solidity ^0.8.4;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
@@ -194,7 +193,7 @@ interface IUniswapV2Router02 is IUniswapV2Router01 {
     ) external;
 }
 
-contract NVROToken is ERC20, ERC20Burnable, Ownable {
+contract NVROToken is ERC20, Ownable {
     using SafeMath for uint256;
     using Address for address;
     mapping (address => uint256) private _rOwned;
@@ -239,6 +238,9 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     //anti-whale dump
     uint256 public _maxTxAmount = 5000000 * 10**18; 
 
+    //anti-whale wallet
+    uint256 public _maxWalletLimit = 30000000 * 10**18;
+
     //for every 500,000 token collected from the tax will be injected into liquidity
     uint256 private numTokensSellToAddToLiquidity = 500000 * 10**18; 
 
@@ -258,11 +260,11 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     }
 
     
-    constructor() ERC20("Enviro Token", "NVRO") {
+    constructor(string memory name, string memory symbol, address _router) ERC20(name,symbol) {
         
          _rOwned[owner()] = _rTotal;
 
-        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(0x10ED43C718714eb63d5aA57B78B54704E256024E);
+        IUniswapV2Router02 _uniswapV2Router = IUniswapV2Router02(_router);
         uniswapV2Pair = IUniswapV2Factory(_uniswapV2Router.factory())
             .createPair(address(this), _uniswapV2Router.WETH());
         uniswapV2Router = _uniswapV2Router;
@@ -270,9 +272,15 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         _isExcludedFromFee[owner()] = true;
         _isExcludedFromFee[address(this)] = true;
 
-        _mint(msg.sender,_tTotal);
+        //minting
+        require(_msgSender() != address(0), "ERC20: mint to the zero address");
+        _beforeTokenTransfer(address(0), _msgSender(), _tTotal);
+        emit Transfer(address(0), _msgSender(), _tTotal);
+        _afterTokenTransfer(address(0), _msgSender(), _tTotal);
+        //-->
 
     }
+    
     function setDevelopmentAddress(address account) public onlyOwner() {
 
        _developmentWalletAddress = account;
@@ -288,12 +296,11 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
     }
     
     function isLocked(address account) public view returns (bool) {
-
-        require(_locked[account] > 0, "account is not locked");
-        require(_locked[account] > block.timestamp, "account is not locked");
-        
-        return true;
+        if(_locked[account] > 0) return true;
+        if(_locked[account] > 0 && _locked[account] > block.timestamp) return true;
+        return false;
     }
+
     function getLockTime(address account) public view returns (uint256) {
 
         require(_locked[account] > 0, "account is not locked");
@@ -309,37 +316,16 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         if (_isExcluded[account]) return _tOwned[account];
         return tokenFromReflection(_rOwned[account]);
     }
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
-        _transfer(_msgSender(), recipient, amount);
-        return true;
-    }
-    function allowance(address owner, address spender) public view override returns (uint256) {
-        return _allowances[owner][spender];
-    }
-    function approve(address spender, uint256 amount) public override returns (bool) {
-        _approve(_msgSender(), spender, amount);
-        return true;
-    }
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
-        _transfer(sender, recipient, amount);
-        _approve(sender, _msgSender(), _allowances[sender][_msgSender()].sub(amount, "ERC20: transfer amount exceeds allowance"));
-        return true;
-    }
-  
+   
+    
     function isExcludedFromReward(address account) public view returns (bool) {
         return _isExcluded[account];
     }
+
     function totalFees() public view returns (uint256) {
         return _tFeeTotal;
     }
-    function deliver(uint256 tAmount) public {
-        address sender = _msgSender();
-        require(!_isExcluded[sender], "Excluded addresses cannot call this function");
-        (uint256 rAmount,,,,,,,) = _getValues(tAmount);
-        _rOwned[sender] = _rOwned[sender].sub(rAmount);
-        _rTotal = _rTotal.sub(rAmount);
-        _tFeeTotal = _tFeeTotal.add(tAmount);
-    }
+
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
@@ -524,7 +510,11 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
         return _isExcludedFromFee[account];
     }
     
-
+    function walletCapped(address account, uint256 amount) private view returns(bool) {
+        uint256 balance = balanceOf(account);
+        if((balance + amount) > _maxWalletLimit) return true;
+        return false;
+    }
     //transfers
     function _transfer(
         address from,
@@ -538,6 +528,10 @@ contract NVROToken is ERC20, ERC20Burnable, Ownable {
 
         //make sure the address is not locked
         require(isLocked(from) != true, "these address is locked.");
+
+        //make sure wallet is not reaching the limit yet.
+        if(from != owner() && to != owner() && isExcludedFromFee(to) != true )
+            require(walletCapped(to, amount) != true, "NVRO:Max. wallet size is 30,000,000");
 
         if(from != owner() && to != owner())
             require(amount <= _maxTxAmount, "Transfer amount exceeds the maxTxAmount.");
