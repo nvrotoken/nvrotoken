@@ -201,7 +201,7 @@ contract NVROToken is ERC20, Ownable {
     mapping (address => mapping (address => uint256)) private _allowances;
     mapping (address => bool) private _isExcludedFromFee;
     mapping (address => bool) private _isExcluded;
-    mapping (address => uint256) private _locked; //the list of locked addresses
+    
 
     address[] private _excluded;
     address private _developmentWalletAddress;
@@ -291,24 +291,11 @@ contract NVROToken is ERC20, Ownable {
        _marketingWalletAddress = account;
        _isExcludedFromFee[account] = true;
     }
-    function lockAccount(address account, uint256 locked_until) public onlyOwner() {
-        _locked[account] = locked_until;
-    }
+   
     
-    function isLocked(address account) public view returns (bool) {
-        if(_locked[account] > 0) return true;
-        if(_locked[account] > 0 && _locked[account] > block.timestamp) return true;
-        return false;
-    }
+   
 
-    function getLockTime(address account) public view returns (uint256) {
-
-        require(_locked[account] > 0, "account is not locked");
-        require(_locked[account] > block.timestamp, "account is not locked");
-
-        return _locked[account];
-        
-    }
+    
     function totalSupply() public view override returns (uint256) {
         return _tTotal;
     }
@@ -381,6 +368,8 @@ contract NVROToken is ERC20, Ownable {
     }
     
     function setMaxTxPercent(uint256 maxTxPercent) external onlyOwner() {
+        require(maxTxPercent < 10,'cannot more than 1% of total supply');
+        require(maxTxPercent > 1,'cannot less than 0.1% of total supply');
         _maxTxAmount = _tTotal.mul(maxTxPercent).div(
             10**3
         );
@@ -526,8 +515,7 @@ contract NVROToken is ERC20, Ownable {
         require(to != address(0), "ERC20: transfer to the zero address");
         require(amount > 0, "Transfer amount must be greater than zero");
 
-        //make sure the address is not locked
-        require(isLocked(from) != true, "these address is locked.");
+        
 
         //make sure wallet is not reaching the limit yet.
         if(from != owner() && to != owner() && isExcludedFromFee(to) != true )
