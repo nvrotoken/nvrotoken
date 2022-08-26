@@ -254,6 +254,11 @@ contract NVROToken is ERC20, Ownable {
         uint256 tokensIntoLiqudity
     );
 
+    event Burned(
+        address account,
+        uint256 amount
+    );
+    
     modifier lockTheSwap {
         inSwapAndLiquify = true;
         _;
