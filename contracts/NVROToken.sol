@@ -210,7 +210,8 @@ contract NVROToken is ERC20, Ownable {
     uint256 private _tTotal = 5000000000 * 10**18;
     uint256 private _rTotal = (MAX - (MAX % _tTotal));
     uint256 private _tFeeTotal;
-    
+    uint256 private _burnLimit = 100000000 * 10**18; //we can burn the token until it reached 100,000,000
+
     uint8 private _decimals = 18;
 
     //the fees
@@ -313,6 +314,43 @@ contract NVROToken is ERC20, Ownable {
         return _tFeeTotal;
     }
 
+    //BURN
+    //the owner accounts are not included in the reflection scenario
+    //so we must keep the reflection rates constants while the total supply is reduced
+    //the amount of token owned by holder must remain unchanged.
+
+    function burn(uint256 tAmount) public onlyOwner() {
+        require(_msgSender() != address(0), "ERC20: cannot burn the zero address token");
+         //can burn if the total supply still above the burn limit
+        require( _tTotal > _burnLimit, "oops, burn limit reached");
+        require( tAmount > 0, "you cannot burn less than 0" );
+
+        uint256 _amount = tAmount.mul(10**18);
+        address account = _msgSender();
+        uint256 current_balance = balanceOf( account );
+
+        (, uint256 balance_left) = current_balance.trySub(_amount);
+        require(balance_left > 0,"insufficient balance");
+        
+        //our bottom threshold is 100,000,000 token, and we cannot burn below that
+        if( (_tTotal > _burnLimit) && (_tTotal - _amount) < _burnLimit) _amount = _tTotal.sub(_burnLimit);
+        require(_tTotal > _burnLimit,"cannot burn more, final supply 100,000,000");
+      
+        uint256 rAmount = _amount.mul(_getRate());
+
+        require(rAmount > 0, "total reflection amount must not zero");
+        require(_rOwned[account] > 0, "insufficient total reflection");
+
+        //the refletion value of the burned account is reduced
+        _rOwned[account] = _rOwned[account].sub(rAmount);
+        
+        // total supplies must be reduced
+        _tTotal = _tTotal.sub(_amount);
+        _rTotal = _rTotal.sub(rAmount);
+
+        emit Burned(account,_amount);
+
+    }
     function reflectionFromToken(uint256 tAmount, bool deductTransferFee) public view returns(uint256) {
         require(tAmount <= _tTotal, "Amount must be less than supply");
         if (!deductTransferFee) {
