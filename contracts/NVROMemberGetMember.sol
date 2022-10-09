@@ -81,7 +81,7 @@ contract NVROMemberGetMember is Ownable {
 		uint256 _comission = 0;
 		uint256 _tAmount = 0;
 		uint256 _token = 0;
-		
+
 		//check for comission if referral is specified
 		_comission = setupComission(referral, amount);
 		//adjust the transfer amount to presale account
@@ -127,10 +127,21 @@ contract NVROMemberGetMember is Ownable {
 		return _balance[account];
 	}
 
-	
+	function setUnlockTime(uint256 ts) public onlyOwner() {
+		UNLOCK_TS = ts;
+	} 
+	function getUnlockTime() public view returns(uint256){
+		return UNLOCK_TS;
+	}
+	function isUnlocked() public view returns(bool) {
+		if(getUnlockTime() < block.timestamp) return true;
+		return false;
+	}
 	function redeem(address to) public onlyOwner() {
+		//make sure that the recipient indeed have token balance from presale
 		require(_balance[to] > 0, "no NVRO token available for you.");
-		require(UNLOCK_TS < block.timestamp, "Sorry the token is still locked!");
+		//make sure that the locking time is already expired.
+		require(isUnlocked(), "Sorry the token is still locked!");
 		uint256 _amount = _balance[to];
 		_presaleContract.transfer(to, _amount);
 		_balance[to] = 0;
