@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.12;
+pragma solidity ^0.8.17;
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
@@ -9,7 +9,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 contract NVROMemberGetMember is Ownable {
 	using SafeMath for uint256;
 	using Address for address; 
-	bool private _locked = true;
 	
 	mapping (address => uint256) private _affiliate;
 	mapping (address => address) private _referer;
@@ -18,7 +17,7 @@ contract NVROMemberGetMember is Ownable {
 	IERC20 private _tokenContract;
 	IERC20 private _presaleContract;
 	address private PRESALE_ADDR;
-	uint256 private TOKEN_PRICE = 1; //this is 0.001
+	uint256 private TOKEN_PRICE = 1; //this is 0.001 BUSD / NVROToken
 	uint256 private DECIMALS = 10**3;
 	uint256 private UNLOCK_TS = 1670605200;
 
@@ -43,7 +42,12 @@ contract NVROMemberGetMember is Ownable {
 	function setPresaleContract(IERC20 addr) public onlyOwner(){
 		_presaleContract = addr;
 	}
-
+	function setPresaleAddress(address presale) public onlyOwner(){
+		PRESALE_ADDR = presale;
+	}
+	function getPresaleAddress() public view returns(address){
+		return PRESALE_ADDR;
+	}
 	function setupComission(address referral, uint256 amount) private returns (uint256) {
 		uint256 _c = 0;
 		
@@ -57,11 +61,11 @@ contract NVROMemberGetMember is Ownable {
 			_affiliate[referral] = 1;
 		}
 		
-		//if referral counts between 5 and 10, the referral recieves 5% of BUSD paid by sender.
-		if(_affiliate[referral] >0 && _affiliate[referral] < 5) {
+		//if referral counts between 1 and 5, the referral recieves 5% of BUSD paid by sender.
+		if(_affiliate[referral] > 0 && _affiliate[referral] < 6) {
 			_c = amount.mul(5).div(100);
 		}
-		//if referral counts between 10 and 20, the referral recieves 10% of BUSD paid by sender.
+		//if referral counts between 5 and 20, the referral recieves 10% of BUSD paid by sender.
 		if(_affiliate[referral] > 5 && _affiliate[referral] < 21) {
 			_c = amount.mul(10).div(100);
 		}
@@ -92,8 +96,9 @@ contract NVROMemberGetMember is Ownable {
 		
 
 		//now we add the token purchased based on it's price rate (TOKEN_PRICE).
-		_token = _tAmount.mul(TOKEN_PRICE);
-
+		//the token is recieved in full, unaffected by the commission.
+		_token = amount.mul(TOKEN_PRICE);
+		
 		//set how many NVRO token the sender can claim after the purchase.
 		if(_balance[_msgSender()] > 0){
 			_balance[_msgSender()].add(_token);
