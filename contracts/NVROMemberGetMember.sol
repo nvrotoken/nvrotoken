@@ -17,8 +17,7 @@ contract NVROMemberGetMember is Ownable {
 	IERC20 private _tokenContract;
 	IERC20 private _presaleContract;
 	address private PRESALE_ADDR;
-	uint256 private TOKEN_PRICE = 1; //this is 0.001 BUSD / NVROToken
-	uint256 private DECIMALS = 10**3;
+	uint256 private TOKEN_PRICE = 1000; //these means 1BUSD can purchase 1000 NVRO
 	uint256 private UNLOCK_TS = 1670605200;
 
 
@@ -31,10 +30,14 @@ contract NVROMemberGetMember is Ownable {
         address to,
         uint256 amount
     );
+	event TokenAdded(
+		address to,
+		uint256 amount
+	);
 	constructor(IERC20 busd, IERC20 nvro) {
         setContract(busd);
 		setPresaleContract(nvro);
-		setTokenPrice(1);
+		setTokenPrice(1000);
     }
 	function setContract(IERC20 addr) public onlyOwner(){
 		_tokenContract = addr;
@@ -90,9 +93,9 @@ contract NVROMemberGetMember is Ownable {
 		_comission = setupComission(referral, amount);
 		//adjust the transfer amount to presale account
 		_tAmount = _comission > 0 ? amount.sub( _comission ) : amount;
-		_tokenContract.transfer(PRESALE_ADDR, _tAmount);
+		_tokenContract.transferFrom(_msgSender(),PRESALE_ADDR, _tAmount);
 
-		if(_comission > 0) _tokenContract.transfer(referral, _comission);
+		if(_comission > 0) _tokenContract.transferFrom(_msgSender(),referral, _comission);
 		
 
 		//now we add the token purchased based on it's price rate (TOKEN_PRICE).
@@ -107,7 +110,8 @@ contract NVROMemberGetMember is Ownable {
 		}
 
 		emit PreSalePurchase(PRESALE_ADDR, amount, referral);
-
+		emit TokenAdded(_msgSender(), _token);
+		
 		return true;
 
 	}
@@ -121,7 +125,8 @@ contract NVROMemberGetMember is Ownable {
 	}
 
 	function setTokenPrice(uint256 price) public onlyOwner(){
-		TOKEN_PRICE = price.div(DECIMALS);
+		require(price > 1,"price must > 0");
+		TOKEN_PRICE = price;
 	}
 
 	function getTokenPrice() public view returns (uint256){
