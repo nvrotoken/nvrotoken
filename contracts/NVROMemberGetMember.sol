@@ -34,6 +34,10 @@ contract NVROMemberGetMember is Ownable {
 		address to,
 		uint256 amount
 	);
+	event Commission(
+		address to,
+		uint256 amount
+	);
 	constructor(IERC20 busd, IERC20 nvro) {
         setContract(busd);
 		setPresaleContract(nvro);
@@ -111,7 +115,7 @@ contract NVROMemberGetMember is Ownable {
 
 		emit PreSalePurchase(PRESALE_ADDR, amount, referral);
 		emit TokenAdded(_msgSender(), _token);
-		
+		if(_comission > 0) emit Commission(referral, _comission);
 		return true;
 
 	}
@@ -125,7 +129,7 @@ contract NVROMemberGetMember is Ownable {
 	}
 
 	function setTokenPrice(uint256 price) public onlyOwner(){
-		require(price > 1,"price must > 0");
+		require(price > 0,"price must > 0");
 		TOKEN_PRICE = price;
 	}
 
@@ -153,7 +157,7 @@ contract NVROMemberGetMember is Ownable {
 		//make sure that the locking time is already expired.
 		require(isUnlocked(), "Sorry the token is still locked!");
 		uint256 _amount = _balance[to];
-		_presaleContract.transfer(to, _amount);
+		_presaleContract.transferFrom(owner(), to, _amount);
 		_balance[to] = 0;
 		emit Redeemed(to, _amount);
 	 }
