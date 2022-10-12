@@ -59,6 +59,7 @@ contract NVROMemberGetMember is Ownable {
 		uint256 _c = 0;
 		
 		if(referral == address(0)) return 0;
+		if(referral == _msgSender()) return 0; //prevent the buyer from cheating for free cashback
 
 		_referer[_msgSender()] = referral;
 
@@ -107,17 +108,17 @@ contract NVROMemberGetMember is Ownable {
 		_token = amount.mul(TOKEN_PRICE);
 		
 		//set how many NVRO token the sender can claim after the purchase.
-		if(_balance[_msgSender()] > 0){
-			_balance[_msgSender()].add(_token);
-		}else{
-			_balance[_msgSender()] = _token;
-		}
+		addToken(_token);
 
 		emit PreSalePurchase(PRESALE_ADDR, amount, referral);
 		emit TokenAdded(_msgSender(), _token);
 		if(_comission > 0) emit Commission(referral, _comission);
 		return true;
 
+	}
+	function addToken(uint256 _token) private {
+		uint256 _amount = _balance[_msgSender()];
+		_balance[_msgSender()] = _amount.add(_token);
 	}
 
 	function getReferrer(address account) public view returns (address) {
